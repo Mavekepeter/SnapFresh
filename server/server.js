@@ -24,7 +24,7 @@ app.post('/stripe',express.raw({type:'application/json'}),stripeWebhook)
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: 'http://localhost:5173', 
+  origin: ['http://localhost:5173','https://snapfresh-git-main-mavekepeters-projects.vercel.app'], 
   credentials: true                
 }));
 
