@@ -15,7 +15,6 @@ import { stripeWebhook } from './controllers/orderController.js';
 
 const app = express();
 const port = process.env.PORT || 4000;
-const allowedOrigins = ['http://localhost:5173']
 
 app.post('/stripe',express.raw({type:'application/json'}),stripeWebhook)
 
@@ -24,9 +23,14 @@ app.post('/stripe',express.raw({type:'application/json'}),stripeWebhook)
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ['http://localhost:5173','https://snapfresh-git-main-mavekepeters-projects.vercel.app'], 
-  credentials: true                
+  origin: [
+    'http://localhost:5173',
+    'https://snapfresh-git-main-mavekepeters-projects.vercel.app',
+    'https://snapfresh-alpha.vercel.app'
+  ],
+  credentials: true
 }));
+
 
 await connectDB()
 await connectCloudinary()
