@@ -2,6 +2,8 @@ import Order from "../models/Order.js";
 import Product from "../models/product.js";
 import stripe from "stripe";
 import User from '../models/Users.js'
+import axios from "axios";
+
 //place order cod :/api/order/cod
 export const placeOrderCod = async (req, res) => {
   try {
@@ -153,6 +155,135 @@ switch (event.type) {
 response.json({received:true})
 
 }
+// ================= M-PESA STK PUSH =================
+
+// Direct test credentials (NO .env)
+const MPESA = {
+  consumerKey: "XGLuhIXXQ2A1ynRnFLhIcbrBXudigjWSt60f3cnEBox1HQhd",
+  consumerSecret: "5CcQMDRb8sjGni937EJNewmPf9lRIKCDiQ3mSVsDXWtmzAlCUU7QCPEyaqhfxdS0",
+  shortCode: "174379",
+  passKey:
+    "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919",
+  partyB: "600000",
+};
+
+const getMpesaToken = async () => {
+  const auth = Buffer.from(
+    `${MPESA.consumerKey}:${MPESA.consumerSecret}`
+  ).toString("base64");
+
+  const { data } = await axios.get(
+    "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    { headers: { Authorization: `Basic ${auth}` } }
+  );
+
+  return data.access_token;
+};
+
+// 🟢 Place order and trigger M-Pesa STK Push
+export const placeOrderMpesa = async (req, res) => {
+  try {
+    const { userId, items, address, phone } = req.body;
+
+    if (!userId || !address || !phone || !items?.length)
+      return res.status(400).json({ success: false, message: "Missing required data" });
+
+    let amount = await items.reduce(async (acc, item) => {
+      const product = await Product.findById(item.product);
+      return (await acc) + product.offerPrice * item.quantity;
+    }, 0);
+
+    amount = Math.ceil(amount * 1.02);
+
+    const order = await Order.create({
+      userId,
+      items,
+      amount,
+      address,
+      paymentType: "M-Pesa",
+      isPaid: false,
+    });
+
+    const token = await getMpesaToken();
+
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:TZ.]/g, "")
+      .slice(0, 14);
+    const password = Buffer.from(
+      `${MPESA.shortCode}${MPESA.passKey}${timestamp}`
+    ).toString("base64");
+
+    const phoneNumber = phone.startsWith("254") ? phone : `254${phone.slice(-9)}`;
+
+    const requestData = {
+      BusinessShortCode: MPESA.shortCode,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: "CustomerPayBillOnline",
+      Amount: amount,
+      PartyA: phoneNumber,
+      PartyB: MPESA.shortCode,
+      PhoneNumber: phoneNumber,
+      CallBackURL: "https://sandbox.safaricom.co.ke/mpesa/callback",
+      AccountReference: `Order${order._id}`,
+      TransactionDesc: "E-commerce Purchase",
+    };
+
+    const { data: stkResponse } = await axios.post(
+      "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      requestData,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    res.json({
+      success: true,
+      message: "STK Push sent successfully. Complete payment on your phone.",
+      data: stkResponse,
+      orderId: order._id,
+    });
+  } catch (error) {
+    console.error("M-Pesa STK Push Error:", error.response?.data || error.message);
+    res.status(400).json({
+      success: false,
+      message: error.response?.data?.errorMessage || "M-Pesa STK Push failed",
+      details: error.response?.data,
+    });
+  }
+};
+
+// ================= CALLBACK =================
+export const mpesaCallback = async (req, res) => {
+  try {
+    const callback = req.body.Body?.stkCallback;
+    if (!callback)
+      return res.status(400).json({ success: false, message: "Invalid callback format" });
+
+    const { ResultCode, CallbackMetadata } = callback;
+
+    if (ResultCode === 0) {
+      const metadata = CallbackMetadata?.Item || [];
+      const mpesaReceipt = metadata.find(i => i.Name === "MpesaReceiptNumber")?.Value;
+      const accountRef = metadata.find(i => i.Name === "AccountReference")?.Value;
+      const orderId = accountRef?.replace("Order", "");
+
+      await Order.findByIdAndUpdate(orderId, {
+        isPaid: true,
+        paymentStatus: "Paid",
+        mpesaReceipt,
+      });
+
+      console.log(`✅ Payment Success | Order: ${orderId} | Receipt: ${mpesaReceipt}`);
+      res.json({ success: true });
+    } else {
+      console.log("Payment Failed or Cancelled");
+      res.json({ success: false });
+    }
+  } catch (error) {
+    console.error("Callback Error:", error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 //Get Orders by UserId: /api/order/user
 export const getUserOrders = async (req, res) => {
   try {

@@ -100,7 +100,7 @@ const AddAddress = () => {
                  />
 
                  <InputField handleChange={handleChange} 
-                    address={address}name="state" type="text" placeholder="state"
+                    address={address}name="state" type="text" placeholder="estate name"
                 />
 
                  </div>

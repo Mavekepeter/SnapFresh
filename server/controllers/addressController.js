@@ -1,16 +1,26 @@
 import Address from "../models/Address.js";
 
 //add Address :/api/address/add
-export const addAdress = async(req, res) => {
+export const addAdress = async (req, res) => {
   try {
-    const addressData = req.body; // receives flattened address + userId
-    await Address.create(addressData);
-    res.json({ success: true, message: "Address added successfully" });
+    console.log("📦 Received address data:", req.body); // 👈 add this
+
+    const { userId } = req.body;
+    if (!userId) {
+      return res.json({
+        success: false,
+        message: "❌ userId missing in request body",
+      });
+    }
+
+    const address = await Address.create(req.body);
+    res.json({ success: true, message: "✅ Address added successfully", address });
   } catch (error) {
-    console.log(error.message);
+    console.error("Add address error:", error.message);
     res.json({ success: false, message: error.message });
   }
 };
+
 
 //get Address : /api/address/get
 export const getAddress = async (req, res) => {
