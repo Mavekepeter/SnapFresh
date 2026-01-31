@@ -1,12 +1,12 @@
 import User from "../models/Users.js";
 import jwt from 'jsonwebtoken'
 import bcryptjs from 'bcryptjs'
-//Regster user
+
 export const registerUser = async(req,res)=>{
     try {
         const {name,email,password} = req.body;
         if(!name || !email || !password){
-            return res.json({success:false,message:'Missing details'})
+            return res.json({success:false,message:'Missing details for use registration'})
         }
         const existingUser = await User.findOne({email})
 
